@@ -33,14 +33,26 @@ IRsend irsend(kIrLed);  // Set the GPIO to be used to sending the message.
 
 #include "credentials.h"
 
+
+#define USE_WOL_MEDIA_PC  1 // Set to 0 if you don't want to use WOL packets to wake up Media PC
+
 #ifndef _CREDENTIALS_H_
 #define WIFI_SSID         "YOUR-WIFI-SSID"    
 #define WIFI_PASS         "YOUR-WIFI-PASSWORD"
 #define APP_KEY           "YOUR-APP-KEY"      // Should look like "de0bxxxx-1x3x-4x3x-ax2x-5dabxxxxxxxx"
 #define APP_SECRET        "YOUR-APP-SECRET"   // Should look like "5f36xxxx-x3x7-4x3x-xexe-e86724a9xxxx-4c4axxxx-3x3x-x5xe-x9x3-333d65xxxxxx"
 #define TV_ID             "YOUR-DEVICE-ID"    // Should look like "5dc1564130xxxxxxxxxxxxxx"
+
+#define MEDIA_PC_MAC      "00:00:00:00:00:00" // Media PC MAC
 #endif
 #define     BAUD_RATE      9600
+
+#if USE_WOL_MEDIA_PC
+  #include <WiFiUdp.h>
+  WiFiUDP UDP;
+  #include <WakeOnLan.h>
+  WakeOnLan WOL(UDP); // Pass WiFiUDP class
+#endif
 
 bool tvPowerState;
 unsigned int tvVolume;
@@ -135,7 +147,14 @@ bool onMute(const String &deviceId, bool &mute) {
 bool onPowerState(const String &deviceId, bool &state) {
   Serial.printf("TV turned %s\r\n", state?"on":"off");
   tvPowerState = state; // set powerState
-  if(state) irsend.sendSony(0x750, 12, 3); // Turn Sony On
+  if(state) {
+    irsend.sendSony(0x750, 12, 3); // Turn Sony On
+
+#if USE_WOL_MEDIA_PC
+      //Send WOL UDP packet (Using the default port - 9)
+      WOL.sendMagicPacket(MEDIA_PC_MAC);
+#endif      
+  }
   else irsend.sendSony(0xf50, 12, 3); // Turn Sony Off
   return true; 
 }
@@ -209,6 +228,11 @@ void setup() {
   setupWiFi();
   setupSinricPro();
   setupChannelNumbers();
+
+#if USE_WOL_MEDIA_PC
+  WOL.setRepeat(3, 100); // Repeat the packet three times with 100ms delay between
+  Serial.printf("WOL Set to %s\r\n", MEDIA_PC_MAC);
+#endif  
 
   irsend.begin();
 }
